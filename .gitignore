@@ -1,0 +1,8 @@
+node_modules/
+dist/
+portfolio/node_modules/
+portfolio/dist/
+.env
+.env.local
+test-results/
+playwright-report/
