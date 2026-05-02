@@ -168,36 +168,46 @@ export function generateSchedule(config) {
     clockToShiftMinutes(p.time, shiftStart)
   );
 
-  // Sort breaks for each employee: lunch first (must be before 5hr mark), then rest breaks
-  // Build a flat list of all breaks that need scheduling
-  const allBreaks = [];
+  // Build a flat list of all breaks that need scheduling.
+  //
+  // Phase ordering is GLOBAL across all employees:
+  //   Phase 1: every employee's FIRST rest break
+  //   Phase 2: every employee's lunch break(s)
+  //   Phase 3: every employee's remaining rest breaks
+  //
+  // This guarantees that by the time any lunch is scheduled, every employee's
+  // first rest is already placed — so the 30-min own-break gap constraint
+  // naturally forces lunch to land after the first rest.
+  const phase1 = []; // first rest for each employee
+  const phase2 = []; // lunches for each employee
+  const phase3 = []; // remaining rests for each employee
+
   for (const emp of employees) {
-    // Per-employee shift times (fall back to global)
     const empStart = emp.shiftStart || shiftStart;
     const empEnd = emp.shiftEnd || shiftEnd;
     const empDuration = getShiftDuration(empStart, empEnd);
-    // Employee's shift start as offset from global shift start
     const empOffsetFromGlobal = clockToShiftMinutes(empStart, shiftStart);
 
-    const sorted = [...emp.breaks].sort((a, b) => {
-      const aLunch = a.type === 'lunch' ? 0 : 1;
-      const bLunch = b.type === 'lunch' ? 0 : 1;
-      if (aLunch !== bLunch) return aLunch - bLunch;
-      return b.duration - a.duration;
+    const makeEntry = brk => ({
+      employeeId: emp.id,
+      employeeName: emp.name,
+      breakId: brk.id,
+      type: brk.type,
+      duration: brk.duration,
+      empShiftStart: empStart,
+      empShiftDuration: empDuration,
+      empOffsetFromGlobal,
     });
-    for (const brk of sorted) {
-      allBreaks.push({
-        employeeId: emp.id,
-        employeeName: emp.name,
-        breakId: brk.id,
-        type: brk.type,
-        duration: brk.duration,
-        empShiftStart: empStart,
-        empShiftDuration: empDuration,
-        empOffsetFromGlobal,
-      });
-    }
+
+    const rests = emp.breaks.filter(b => b.type === 'rest');
+    const lunches = emp.breaks.filter(b => b.type === 'lunch');
+
+    if (rests.length > 0) phase1.push(makeEntry(rests[0]));
+    lunches.forEach(l => phase2.push(makeEntry(l)));
+    rests.slice(1).forEach(r => phase3.push(makeEntry(r)));
   }
+
+  const allBreaks = [...phase1, ...phase2, ...phase3];
 
   // Scheduled breaks: { employeeId, breakId, type, duration, startShiftMin, endShiftMin }
   // All startShiftMin/endShiftMin are relative to the GLOBAL shift start
@@ -218,6 +228,16 @@ export function generateSchedule(config) {
       const mealWindow = getMealWindow(empShiftDuration, duration);
       windowStart = Math.max(windowStart, empOffsetFromGlobal + mealWindow.earliest);
       windowEnd = Math.min(windowEnd, empOffsetFromGlobal + mealWindow.latest);
+
+      // Lunch must come AFTER the employee's first rest break.
+      // The Phase 1 rest is already scheduled; push windowStart past it + gap.
+      const alreadyScheduledRests = scheduled.filter(
+        s => s.employeeId === employeeId && s.type === 'rest'
+      );
+      if (alreadyScheduledRests.length > 0) {
+        const latestRestEnd = Math.max(...alreadyScheduledRests.map(s => s.endShiftMin));
+        windowStart = Math.max(windowStart, latestRestEnd + OWN_BREAK_GAP);
+      }
     }
 
     // Fallback: if window is impossible, relax to fit within shift
@@ -233,11 +253,15 @@ export function generateSchedule(config) {
     // Get existing breaks for this employee
     const ownBreaks = scheduled.filter(s => s.employeeId === employeeId);
 
-    // For rest breaks: compute ideal midpoints of work segments (Oregon law)
+    // For rest breaks: compute ideal midpoints of work segments (Oregon law).
+    // Only applies when a meal is already scheduled — the pre-lunch first rest
+    // has no meal yet, so we skip midpoint targeting to keep it early in the shift.
     let restMidpoints = [];
     if (type === 'rest') {
       const ownMeals = ownBreaks.filter(s => s.type === 'lunch');
-      restMidpoints = getRestMidpoints(empOffsetFromGlobal, empShiftDuration, ownMeals);
+      if (ownMeals.length > 0) {
+        restMidpoints = getRestMidpoints(empOffsetFromGlobal, empShiftDuration, ownMeals);
+      }
     }
 
     // Score each possible minute slot
