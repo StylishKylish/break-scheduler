@@ -13,7 +13,7 @@ const PROJECTS = [
       'Floor coverage chart with low-coverage warnings',
       'Dark mode, mobile-first, deploy-ready',
     ],
-    liveUrl: 'https://your-break-scheduler.vercel.app', // TODO: update this URL
+    liveUrl: 'https://break-scheduler-gamma.vercel.app',
     githubUrl: 'https://github.com/StylishKylish/break-scheduler',
     accent: 'brand',
   },
