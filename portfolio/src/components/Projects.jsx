@@ -14,7 +14,7 @@ const PROJECTS = [
       'Dark mode, mobile-first, deploy-ready',
     ],
     liveUrl: 'https://your-break-scheduler.vercel.app', // TODO: update this URL
-    githubUrl: 'https://github.com/YOUR_USERNAME/break-scheduler', // TODO: update this URL
+    githubUrl: 'https://github.com/StylishKylish/break-scheduler',
     accent: 'brand',
   },
   // TODO: Add more projects here. Example structure:

@@ -140,7 +140,7 @@ export default function App() {
               )}
             </button>
             <a
-              href="https://github.com"
+              href="https://github.com/StylishKylish/break-scheduler"
               target="_blank"
               rel="noopener noreferrer"
               className="rounded-lg border border-gray-200 p-1.5 text-gray-400 transition-colors
